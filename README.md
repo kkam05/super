@@ -14,16 +14,37 @@ An npm-style project manager for Go. Scaffold new projects, define scripts, and 
 
 ## Installation
 
+### From a GitHub release (recommended)
+
+Download the latest release zip for your platform from the [releases page](https://github.com/kkam05/super/releases), then run `super update --local` from inside the super source directory, or manually extract the binary to `~/.super/bin/`.
+
+Once installed, run `super path` to add `~/.super/bin` to your PATH automatically.
+
+### From source
+
 ```bash
 git clone https://github.com/kkam05/super.git
 cd super
-go build -o super src/*.go
+go build -o build/super src/*.go
+./build/super update --local
+./build/super path
 ```
 
-Move the binary somewhere on your `PATH`:
+---
+
+## Updating
+
+Pull and install the latest release from GitHub:
 
 ```bash
-mv super /usr/local/bin/super
+super update
+```
+
+Install from a local build (useful when developing super itself):
+
+```bash
+super run build          # compiles to build/super
+super update --local     # installs build/super to ~/.super/bin
 ```
 
 ---
@@ -75,9 +96,57 @@ Scripts are resolved in order:
 
 If a script is not registered in `project.settings` but a matching `.sh` file exists in `.super/scripts/`, super will auto-register it and run it.
 
+### `super fix`
+
+Repair a project to match the expected super structure. Ensures dirs, `project.settings`, scripts, and the version file are all present and correct.
+
+```bash
+super fix
+```
+
+### `super update [--local]`
+
+Pull and install the latest release from GitHub, or install from a local build.
+
+```bash
+super update           # download and install the latest release from GitHub
+super update --local   # install from build/super in the current project
+```
+
+The binary is installed to `~/.super/bin/super`. A backup of the previous version is kept in `~/.super/backup/`.
+
+### `super path`
+
+Check whether `~/.super/bin` is on your `PATH`. If it is not, super adds the entry to your shell config file automatically.
+
+```bash
+super path
+```
+
+Supported shells: zsh, bash, fish. On Windows, the user `PATH` is updated in the registry via PowerShell.
+
+### `super dev <subcommand>`
+
+Developer utilities for working on super itself.
+
+#### `super dev release --local`
+
+Package the local build binary into a release zip ready to upload to GitHub Releases.
+
+```bash
+super run build               # build the binary first
+super dev release --local     # creates release/super-<GOOS>-<GOARCH>.zip
+```
+
+The zip name matches what `super update` expects, so you can upload it directly to a GitHub release tagged `v<version>`.
+
 ### `super version`
 
 Print the installed version.
+
+```bash
+super version   # super v0.1.4
+```
 
 ### `super help`
 
@@ -92,6 +161,7 @@ Projects are configured via a `project.settings` file at the project root, writt
 ```toml
 [project]
 name = "myapp"
+version = "0.1.0"
 description = "my Go application"
 
 [scripts]
@@ -115,7 +185,7 @@ Script values can be:
 
 When you run `super new`, the following scripts are generated inside `.super/scripts/`:
 
-- **`build.sh`** — compiles `src/main.go` to `build/<name>`
+- **`build.sh`** — compiles `src/*.go` to `build/<name>`, auto-incrementing the patch version in `project.settings`, `src/main.go`, and `.super/version`
 - **`run.sh`** — executes the compiled binary from `build/`
 - **`dev.sh`** — runs `go run src/main.go` directly
 
