@@ -1,3 +1,9 @@
 [project]
-name = "super"
-description = "npm style project manager for go"
+  description = "npm style project manager for go"
+  name = "super"
+  super_version = "0.1.0"
+
+[scripts]
+  build = ".super/scripts"
+  dev = ".super/scripts"
+  run = ".super/scripts"

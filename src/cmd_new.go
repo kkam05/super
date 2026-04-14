@@ -104,6 +104,9 @@ func scaffold(root, name string) {
 		writeFileExec(filepath.Join(scriptsDir, "dev.sh"), devSH())
 	}
 
+	// ── .super/version ─────────────────────────────────────────────────────────
+	writeFile(filepath.Join(root, ".super", "version"), version+"\n")
+
 	// ── go mod init ────────────────────────────────────────────────────────────
 	runGoModInit(root, name)
 
@@ -163,13 +166,14 @@ type projectConfig struct {
 }
 
 type projectSection struct {
-	Name        string `toml:"name"`
-	Description string `toml:"description,omitempty"`
+	Name         string `toml:"name"`
+	Description  string `toml:"description,omitempty"`
+	SuperVersion string `toml:"super_version,omitempty"`
 }
 
 func projectSettings(name string) string {
 	cfg := projectConfig{
-		Project: projectSection{Name: name},
+		Project: projectSection{Name: name, SuperVersion: version},
 		Scripts: map[string]string{
 			"build": ".super/scripts",
 			"run":   ".super/scripts",

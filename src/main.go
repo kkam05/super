@@ -23,6 +23,8 @@ func main() {
 		cmdNew(rest)
 	case "run":
 		cmdRun(rest)
+	case "fix":
+		cmdFix(rest)
 	case "version", "--version", "-v":
 		fmt.Printf("super v%s\n", version)
 	case "help", "--help", "-h":
@@ -54,6 +56,8 @@ func printUsage() {
 	fmt.Printf("  %-28s Use -y to overwrite a non-empty directory.\n", "")
 	fmt.Printf("  %-28s Run a script defined in project.settings.\n", bold.Sprint("run")+" <script> [args...]")
 	fmt.Printf("  %-28s Scripts can be paths (.super/scripts) or inline commands.\n", "")
+	fmt.Printf("  %-28s Repair a project to match the expected super structure.\n", bold.Sprint("fix"))
+	fmt.Printf("  %-28s Ensures dirs, project.settings, scripts, and version file are correct.\n", "")
 	fmt.Printf("  %-28s Print the super version.\n", bold.Sprint("version"))
 	fmt.Printf("  %-28s Show this help message.\n\n", bold.Sprint("help"))
 }
