@@ -157,7 +157,7 @@ func runGoModInit(root, name string) {
 // ── file content generators ────────────────────────────────────────────────────
 
 func srcMainGo() string {
-	return "package main\n\nfunc main() {\n}\n"
+	return "package main\n\nvar version = \"dev\"\n\nfunc main() {\n}\n"
 }
 
 type projectConfig struct {
@@ -167,13 +167,14 @@ type projectConfig struct {
 
 type projectSection struct {
 	Name         string `toml:"name"`
+	Version      string `toml:"version,omitempty"`
 	Description  string `toml:"description,omitempty"`
 	SuperVersion string `toml:"super_version,omitempty"`
 }
 
 func projectSettings(name string) string {
 	cfg := projectConfig{
-		Project: projectSection{Name: name, SuperVersion: version},
+		Project: projectSection{Name: name, Version: "0.1.0", SuperVersion: version},
 		Scripts: map[string]string{
 			"build": ".super/scripts",
 			"run":   ".super/scripts",
@@ -197,12 +198,25 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-# Read project name from project.settings
 NAME="%s"
+SETTINGS="$PROJECT_ROOT/project.settings"
+
+# Auto-increment patch version in project.settings
+CURRENT=$(grep -E '^\s+version = ' "$SETTINGS" 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+if [ -n "$CURRENT" ]; then
+  MAJOR=$(echo "$CURRENT" | cut -d. -f1)
+  MINOR=$(echo "$CURRENT" | cut -d. -f2)
+  PATCH=$(echo "$CURRENT" | cut -d. -f3)
+  NEW_VERSION="$MAJOR.$MINOR.$((PATCH + 1))"
+  sed -i.bak "s/^\(  version = \"\)[0-9]*\.[0-9]*\.[0-9]*/\1$NEW_VERSION/" "$SETTINGS" && rm -f "$SETTINGS.bak"
+  echo "[super] version: $CURRENT -> $NEW_VERSION"
+else
+  NEW_VERSION="dev"
+fi
 
 cd "$PROJECT_ROOT"
 echo "[super] building $NAME..."
-go build -o "build/$NAME" src/main.go
+go build -ldflags "-X main.version=$NEW_VERSION" -o "build/$NAME" src/*.go
 echo "[super] build complete -> build/$NAME"
 `, name)
 }
@@ -247,10 +261,31 @@ $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ProjectRoot = Resolve-Path (Join-Path $ScriptDir "..\..")
 
 $Name = "%s"
+$Settings = Join-Path $ProjectRoot "project.settings"
+
+# Auto-increment patch version in project.settings
+$NewVersion = "dev"
+$OldVer = $null
+foreach ($line in (Get-Content $Settings)) {
+    if ($line -match '^\s+version = "(\d+)\.(\d+)\.(\d+)"') {
+        $OldVer = $Matches[1] + '.' + $Matches[2] + '.' + $Matches[3]
+        $NewVersion = $Matches[1] + '.' + $Matches[2] + '.' + ([int]$Matches[3] + 1)
+        break
+    }
+}
+if ($OldVer) {
+    $updated = (Get-Content $Settings) | ForEach-Object {
+        if ($_ -match '^\s+version = "\d+\.\d+\.\d+"') {
+            $_ -replace [regex]::Escape('"' + $OldVer + '"'), ('"' + $NewVersion + '"')
+        } else { $_ }
+    }
+    Set-Content $Settings $updated
+    Write-Host "[super] version: $OldVer -> $NewVersion"
+}
 
 Set-Location $ProjectRoot
 Write-Host "[super] building $Name..."
-go build -o "build\$Name.exe" src\main.go
+go build -ldflags "-X main.version=$NewVersion" -o "build\$Name.exe" src\*.go
 Write-Host "[super] build complete -> build\$Name.exe"
 `, name)
 }

@@ -58,6 +58,11 @@ func cmdFix(_ []string) {
 		settingsChanged = true
 	}
 
+	if cfg.Project.Version == "" {
+		cfg.Project.Version = "0.1.0"
+		settingsChanged = true
+	}
+
 	if cfg.Project.SuperVersion != version {
 		cfg.Project.SuperVersion = version
 		settingsChanged = true

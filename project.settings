@@ -1,6 +1,7 @@
 [project]
   description = "npm style project manager for go"
   name = "super"
+  version = "0.1.1"
   super_version = "0.1.0"
 
 [scripts]
