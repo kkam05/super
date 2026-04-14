@@ -52,7 +52,7 @@ const asciiArt = `
 `
 
 func printUsage() {
-	fmt.Print(cyanBold.Sprint(asciiArt))
+	fmt.Println(cyanBold.Sprint(asciiArt))
 	fmt.Printf("%s — an npm-style project manager for Go (%s)\n\n", tag(), bold.Sprintf("v%s", version))
 	fmt.Printf("%s\n\n", gray.Sprint("Usage:"))
 	fmt.Printf("  super %s\n\n", bold.Sprint("<command> [arguments]"))
