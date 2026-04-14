@@ -60,8 +60,8 @@ func printUsage() {
 	fmt.Printf("  %-28s Scripts can be paths (.super/scripts) or inline commands.\n", "")
 	fmt.Printf("  %-28s Repair a project to match the expected super structure.\n", bold.Sprint("fix"))
 	fmt.Printf("  %-28s Ensures dirs, project.settings, scripts, and version file are correct.\n", "")
-	fmt.Printf("  %-28s Install the local build to ~/.super/bin/.\n", bold.Sprint("update")+" --local")
-	fmt.Printf("  %-28s Copies build/super and updates ~/.super/super.settings.\n", "")
+	fmt.Printf("  %-28s Pull and install the latest release from GitHub.\n", bold.Sprint("update"))
+	fmt.Printf("  %-28s Use --local to install from build/super instead.\n", "")
 	fmt.Printf("  %-28s Print the super version.\n", bold.Sprint("version"))
 	fmt.Printf("  %-28s Show this help message.\n\n", bold.Sprint("help"))
 }

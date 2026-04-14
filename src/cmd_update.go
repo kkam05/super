@@ -1,15 +1,21 @@
 package main
 
 import (
+	"archive/zip"
+	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/pelletier/go-toml"
 )
+
+const githubRepo = "kkam05/super"
 
 type globalConfig struct {
 	Super globalSuperSection `toml:"super"`
@@ -21,6 +27,16 @@ type globalSuperSection struct {
 	UpdatedAt     string `toml:"updated_at"`
 }
 
+type githubRelease struct {
+	TagName string        `json:"tag_name"`
+	Assets  []githubAsset `json:"assets"`
+}
+
+type githubAsset struct {
+	Name               string `json:"name"`
+	BrowserDownloadURL string `json:"browser_download_url"`
+}
+
 func cmdUpdate(args []string) {
 	var local bool
 	for _, a := range args {
@@ -29,13 +45,14 @@ func cmdUpdate(args []string) {
 		}
 	}
 
-	if !local {
-		printError("usage: super update --local")
-		os.Exit(1)
+	if local {
+		updateLocal()
+	} else {
+		updateRemote()
 	}
-
-	updateLocal()
 }
+
+// ── local install ──────────────────────────────────────────────────────────────
 
 func updateLocal() {
 	projectRoot, err := findProjectRoot()
@@ -82,12 +99,240 @@ func updateLocal() {
 	}
 	printStep("installed", dstPath)
 
-	// Write ~/.super/super.settings
+	writeGlobalSettings(home, newVersion, "local")
+
+	fmt.Println()
+	printSuccess(fmt.Sprintf("super v%s installed to %s", newVersion, dstPath))
+	printInfo(fmt.Sprintf("make sure %s is on your PATH", binDir))
+}
+
+// ── remote install ─────────────────────────────────────────────────────────────
+
+func updateRemote() {
+	printInfo("checking for latest release...")
+
+	release, err := fetchLatestRelease()
+	if err != nil {
+		printError("could not fetch release info: " + err.Error())
+		os.Exit(1)
+	}
+
+	assetName := fmt.Sprintf("super-%s-%s.zip", runtime.GOOS, runtime.GOARCH)
+	var downloadURL string
+	for _, a := range release.Assets {
+		if a.Name == assetName {
+			downloadURL = a.BrowserDownloadURL
+			break
+		}
+	}
+	if downloadURL == "" {
+		printError(fmt.Sprintf("no release asset found for %s/%s (expected %s)", runtime.GOOS, runtime.GOARCH, assetName))
+		os.Exit(1)
+	}
+
+	newVersion := strings.TrimPrefix(release.TagName, "v")
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		printError("could not determine home directory: " + err.Error())
+		os.Exit(1)
+	}
+
+	ext := ""
+	if runtime.GOOS == "windows" {
+		ext = ".exe"
+	}
+
+	binDir := filepath.Join(home, ".super", "bin")
+	tmpDir := filepath.Join(home, ".super", "tmp")
+	backupDir := filepath.Join(home, ".super", "backup")
+	for _, d := range []string{binDir, tmpDir, backupDir} {
+		if err := os.MkdirAll(d, 0755); err != nil {
+			printError("could not create directory " + d + ": " + err.Error())
+			os.Exit(1)
+		}
+	}
+
+	dstPath := filepath.Join(binDir, "super"+ext)
+
+	// Backup current binary if it exists
+	if _, err := os.Stat(dstPath); err == nil {
+		curVersion := currentInstalledVersion(home)
+		backupName := fmt.Sprintf("super-v%s-%s-%s.zip", curVersion, runtime.GOOS, runtime.GOARCH)
+		backupPath := filepath.Join(backupDir, backupName)
+		if err := zipBinary(dstPath, backupPath, "super"+ext); err != nil {
+			printWarn("could not create backup: " + err.Error())
+		} else {
+			printStep("backed up", backupPath)
+		}
+	}
+
+	// Download release zip
+	tmpZip := filepath.Join(tmpDir, assetName)
+	printInfo(fmt.Sprintf("downloading %s...", release.TagName))
+	if err := downloadFile(downloadURL, tmpZip); err != nil {
+		printError("download failed: " + err.Error())
+		os.Exit(1)
+	}
+	printStep("downloaded", tmpZip)
+
+	// Extract binary from zip
+	binaryName := "super" + ext
+	if err := extractFromZip(tmpZip, binaryName, dstPath, 0755); err != nil {
+		printError("could not extract binary: " + err.Error())
+		os.Exit(1)
+	}
+	printStep("installed", dstPath)
+
+	// Clean up tmp
+	_ = os.Remove(tmpZip)
+
+	writeGlobalSettings(home, newVersion, "remote")
+
+	fmt.Println()
+	printSuccess(fmt.Sprintf("super v%s installed to %s", newVersion, dstPath))
+	printInfo(fmt.Sprintf("make sure %s is on your PATH", binDir))
+}
+
+// ── helpers ────────────────────────────────────────────────────────────────────
+
+func fetchLatestRelease() (*githubRelease, error) {
+	url := "https://api.github.com/repos/" + githubRepo + "/releases/latest"
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("User-Agent", "super-cli/"+version)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
+	}
+
+	var release githubRelease
+	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
+		return nil, err
+	}
+	return &release, nil
+}
+
+func downloadFile(url, dst string) error {
+	resp, err := http.Get(url) //nolint:noctx
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("HTTP %d downloading asset", resp.StatusCode)
+	}
+
+	f, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	_, err = io.Copy(f, resp.Body)
+	return err
+}
+
+// zipBinary creates a zip archive at dst containing src as nameInZip.
+func zipBinary(src, dst, nameInZip string) error {
+	zf, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer zf.Close()
+
+	w := zip.NewWriter(zf)
+	defer w.Close()
+
+	f, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	fi, err := f.Stat()
+	if err != nil {
+		return err
+	}
+
+	hdr, err := zip.FileInfoHeader(fi)
+	if err != nil {
+		return err
+	}
+	hdr.Name = nameInZip
+	hdr.Method = zip.Deflate
+
+	wr, err := w.CreateHeader(hdr)
+	if err != nil {
+		return err
+	}
+
+	_, err = io.Copy(wr, f)
+	return err
+}
+
+// extractFromZip finds binaryName (by base name) inside zipPath and writes it to dst.
+func extractFromZip(zipPath, binaryName, dst string, perm os.FileMode) error {
+	r, err := zip.OpenReader(zipPath)
+	if err != nil {
+		return err
+	}
+	defer r.Close()
+
+	for _, f := range r.File {
+		if filepath.Base(f.Name) == binaryName {
+			rc, err := f.Open()
+			if err != nil {
+				return err
+			}
+			defer rc.Close()
+
+			out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, perm)
+			if err != nil {
+				return err
+			}
+			defer out.Close()
+
+			_, err = io.Copy(out, rc)
+			return err
+		}
+	}
+	return fmt.Errorf("binary %q not found in zip", binaryName)
+}
+
+// currentInstalledVersion reads the version from ~/.super/super.settings.
+func currentInstalledVersion(home string) string {
+	settingsPath := filepath.Join(home, ".super", "super.settings")
+	data, err := os.ReadFile(settingsPath)
+	if err != nil {
+		return "unknown"
+	}
+	var gcfg globalConfig
+	if err := toml.Unmarshal(data, &gcfg); err != nil {
+		return "unknown"
+	}
+	if gcfg.Super.Version == "" {
+		return "unknown"
+	}
+	return gcfg.Super.Version
+}
+
+func writeGlobalSettings(home, newVersion, method string) {
 	globalSettingsPath := filepath.Join(home, ".super", "super.settings")
 	gcfg := &globalConfig{
 		Super: globalSuperSection{
 			Version:       newVersion,
-			InstallMethod: "local",
+			InstallMethod: method,
 			UpdatedAt:     time.Now().Format("2006-01-02"),
 		},
 	}
@@ -99,10 +344,6 @@ func updateLocal() {
 			printStep("updated", globalSettingsPath)
 		}
 	}
-
-	fmt.Println()
-	printSuccess(fmt.Sprintf("super v%s installed to %s", newVersion, dstPath))
-	printInfo(fmt.Sprintf("make sure %s is on your PATH", binDir))
 }
 
 func copyFile(src, dst string, perm os.FileMode) error {
