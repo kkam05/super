@@ -1,4 +1,4 @@
-package main
+package cmd
 
 import (
 	"fmt"
@@ -7,23 +7,25 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"dxtrity/super/src/util"
 )
 
-func cmdPath(_ []string) {
+func CmdPath(_ []string) {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		printError("could not determine home directory: " + err.Error())
+		util.PrintError("could not determine home directory: " + err.Error())
 		os.Exit(1)
 	}
 
 	binDir := filepath.Join(home, ".super", "bin")
 
 	if isOnPath(binDir) {
-		printSuccess(fmt.Sprintf("%s is already on your PATH", binDir))
+		util.PrintSuccess(fmt.Sprintf("%s is already on your PATH", binDir))
 		return
 	}
 
-	printInfo(fmt.Sprintf("%s is not on your PATH — adding it now...", binDir))
+	util.PrintInfo(fmt.Sprintf("%s is not on your PATH — adding it now...", binDir))
 
 	if runtime.GOOS == "windows" {
 		addToPathWindows(binDir)
@@ -51,7 +53,7 @@ func addToPathUnix(binDir string) {
 
 	cfg := detectShellConfig(home)
 	if cfg == "" {
-		printWarn("could not detect shell config file — add the following line manually:")
+		util.PrintWarn("could not detect shell config file — add the following line manually:")
 		fmt.Printf("  %s\n", line)
 		return
 	}
@@ -60,27 +62,27 @@ func addToPathUnix(binDir string) {
 	// didn't affect the running shell's PATH).
 	data, _ := os.ReadFile(cfg)
 	if strings.Contains(string(data), binDir) {
-		printInfo(fmt.Sprintf("PATH entry already exists in %s", cfg))
-		printInfo("restart your terminal or run: source " + cfg)
+		util.PrintInfo(fmt.Sprintf("PATH entry already exists in %s", cfg))
+		util.PrintInfo("restart your terminal or run: source " + cfg)
 		return
 	}
 
 	f, err := os.OpenFile(cfg, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)
 	if err != nil {
-		printError("could not open " + cfg + ": " + err.Error())
+		util.PrintError("could not open " + cfg + ": " + err.Error())
 		os.Exit(1)
 	}
 	defer f.Close()
 
 	if _, err := fmt.Fprintf(f, "\n# added by super\n%s\n", line); err != nil {
-		printError("could not write to " + cfg + ": " + err.Error())
+		util.PrintError("could not write to " + cfg + ": " + err.Error())
 		os.Exit(1)
 	}
 
-	printStep("updated", cfg)
+	util.PrintStep("updated", cfg)
 	fmt.Println()
-	printSuccess(fmt.Sprintf("%s added to PATH in %s", binDir, cfg))
-	printInfo("restart your terminal or run: source " + cfg)
+	util.PrintSuccess(fmt.Sprintf("%s added to PATH in %s", binDir, cfg))
+	util.PrintInfo("restart your terminal or run: source " + cfg)
 }
 
 // detectShellConfig returns the most appropriate shell rc file for the user.
@@ -126,7 +128,7 @@ func detectShellConfig(home string) string {
 	return ""
 }
 
-// addToPathWindows adds binDir to the user PATH via setx.
+// addToPathWindows adds binDir to the user PATH via PowerShell.
 func addToPathWindows(binDir string) {
 	// Read the current user PATH from the registry via PowerShell so we can
 	// append rather than overwrite (setx truncates values > 1024 chars if
@@ -134,7 +136,7 @@ func addToPathWindows(binDir string) {
 	psGetPath := `[Environment]::GetEnvironmentVariable('Path','User')`
 	out, err := exec.Command("powershell", "-NoProfile", "-Command", psGetPath).Output()
 	if err != nil {
-		printError("could not read user PATH from registry: " + err.Error())
+		util.PrintError("could not read user PATH from registry: " + err.Error())
 		os.Exit(1)
 	}
 
@@ -144,8 +146,8 @@ func addToPathWindows(binDir string) {
 	// process PATH may differ from the registry value).
 	for _, p := range strings.Split(currentPath, ";") {
 		if strings.EqualFold(filepath.Clean(p), filepath.Clean(binDir)) {
-			printInfo("PATH entry already exists in user environment")
-			printInfo("restart your terminal for the change to take effect")
+			util.PrintInfo("PATH entry already exists in user environment")
+			util.PrintInfo("restart your terminal for the change to take effect")
 			return
 		}
 	}
@@ -158,13 +160,13 @@ func addToPathWindows(binDir string) {
 
 	psSetPath := fmt.Sprintf(`[Environment]::SetEnvironmentVariable('Path','%s','User')`, strings.ReplaceAll(newPath, "'", "''"))
 	if err := exec.Command("powershell", "-NoProfile", "-Command", psSetPath).Run(); err != nil {
-		printError("could not update user PATH: " + err.Error())
-		printWarn("add the following to your PATH manually:")
+		util.PrintError("could not update user PATH: " + err.Error())
+		util.PrintWarn("add the following to your PATH manually:")
 		fmt.Printf("  %s\n", binDir)
 		os.Exit(1)
 	}
 
 	fmt.Println()
-	printSuccess(fmt.Sprintf("%s added to user PATH", binDir))
-	printInfo("restart your terminal for the change to take effect")
+	util.PrintSuccess(fmt.Sprintf("%s added to user PATH", binDir))
+	util.PrintInfo("restart your terminal for the change to take effect")
 }

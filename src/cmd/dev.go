@@ -1,15 +1,18 @@
-package main
+package cmd
 
 import (
 	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
+
+	"dxtrity/super/src/config"
+	"dxtrity/super/src/util"
 )
 
-func cmdDev(args []string) {
+func CmdDev(args []string) {
 	if len(args) == 0 {
-		printError("usage: super dev <subcommand> [flags]")
+		util.PrintError("usage: super dev <subcommand> [flags]")
 		fmt.Fprintln(os.Stderr, "  subcommands: release")
 		os.Exit(1)
 	}
@@ -21,7 +24,7 @@ func cmdDev(args []string) {
 	case "release":
 		cmdDevRelease(rest)
 	default:
-		printError(fmt.Sprintf("unknown dev subcommand: %q", sub))
+		util.PrintError(fmt.Sprintf("unknown dev subcommand: %q", sub))
 		os.Exit(1)
 	}
 }
@@ -41,21 +44,21 @@ func cmdDevRelease(args []string) {
 	}
 
 	if !local {
-		printError("super dev release requires --local (only local builds are supported)")
+		util.PrintError("super dev release requires --local (only local builds are supported)")
 		os.Exit(1)
 	}
 
-	projectRoot, err := findProjectRoot()
+	projectRoot, err := config.FindProjectRoot()
 	if err != nil {
-		printError(err.Error())
+		util.PrintError(err.Error())
 		os.Exit(1)
 	}
 
 	// Read project name and version from project.settings.
 	settingsPath := filepath.Join(projectRoot, "project.settings")
-	cfg, err := loadSettings(settingsPath)
+	cfg, err := config.LoadSettings(settingsPath)
 	if err != nil {
-		printError("could not read project.settings: " + err.Error())
+		util.PrintError("could not read project.settings: " + err.Error())
 		os.Exit(1)
 	}
 
@@ -76,14 +79,14 @@ func cmdDevRelease(args []string) {
 	// Locate the built binary.
 	binarySrc := filepath.Join(projectRoot, "build", name+ext)
 	if _, err := os.Stat(binarySrc); err != nil {
-		printError(fmt.Sprintf("binary not found at %s — run 'super run build' first", filepath.Join("build", name+ext)))
+		util.PrintError(fmt.Sprintf("binary not found at %s — run 'super run build' first", filepath.Join("build", name+ext)))
 		os.Exit(1)
 	}
 
 	// Create release/ directory.
 	releaseDir := filepath.Join(projectRoot, "release")
 	if err := os.MkdirAll(releaseDir, 0755); err != nil {
-		printError("could not create release/ directory: " + err.Error())
+		util.PrintError("could not create release/ directory: " + err.Error())
 		os.Exit(1)
 	}
 
@@ -92,12 +95,12 @@ func cmdDevRelease(args []string) {
 	zipDst := filepath.Join(releaseDir, zipName)
 
 	if err := zipBinary(binarySrc, zipDst, name+ext); err != nil {
-		printError("could not create release zip: " + err.Error())
+		util.PrintError("could not create release zip: " + err.Error())
 		os.Exit(1)
 	}
 
-	printStep("created", filepath.Join("release", zipName))
+	util.PrintStep("created", filepath.Join("release", zipName))
 	fmt.Println()
-	printSuccess(fmt.Sprintf("%s v%s packaged as %s", name, ver, zipName))
-	printInfo(fmt.Sprintf("upload %s to your GitHub release tagged v%s", zipName, ver))
+	util.PrintSuccess(fmt.Sprintf("%s v%s packaged as %s", name, ver, zipName))
+	util.PrintInfo(fmt.Sprintf("upload %s to your GitHub release tagged v%s", zipName, ver))
 }

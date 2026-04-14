@@ -25,5 +25,5 @@ fi
 
 cd "$PROJECT_ROOT"
 echo "[super] building $NAME @ v$NEW_VERSION..."
-go build -o "build/$NAME" src/*.go
+go build -o "build/$NAME" ./src/
 echo "[super] build complete -> build/$NAME"

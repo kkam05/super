@@ -1,4 +1,4 @@
-package main
+package cmd
 
 import (
 	"fmt"
@@ -7,10 +7,13 @@ import (
 	"path/filepath"
 	"runtime"
 
+	"dxtrity/super/src/config"
+	"dxtrity/super/src/util"
+
 	"github.com/pelletier/go-toml"
 )
 
-func cmdNew(args []string) {
+func CmdNew(args []string) {
 	// parse flags
 	var force bool
 	var rest []string
@@ -25,7 +28,7 @@ func cmdNew(args []string) {
 
 	cwd, err := os.Getwd()
 	if err != nil {
-		printError("could not determine current directory: " + err.Error())
+		util.PrintError("could not determine current directory: " + err.Error())
 		os.Exit(1)
 	}
 
@@ -36,19 +39,19 @@ func cmdNew(args []string) {
 		projectRoot = filepath.Join(cwd, projectName)
 
 		if err := os.MkdirAll(projectRoot, 0755); err != nil {
-			printError("could not create project directory: " + err.Error())
+			util.PrintError("could not create project directory: " + err.Error())
 			os.Exit(1)
 		}
-		printStep("created", projectName+"/")
+		util.PrintStep("created", projectName+"/")
 	} else {
 		projectRoot = cwd
 		projectName = filepath.Base(cwd)
-		printInfo(fmt.Sprintf("scaffolding in current directory as \"%s\"", projectName))
+		util.PrintInfo(fmt.Sprintf("scaffolding in current directory as \"%s\"", projectName))
 	}
 
 	if !force {
 		if err := checkDirEmpty(projectRoot); err != nil {
-			printError(fmt.Sprintf("directory %q is not empty — use -y to overwrite", filepath.Base(projectRoot)))
+			util.PrintError(fmt.Sprintf("directory %q is not empty — use -y to overwrite", filepath.Base(projectRoot)))
 			os.Exit(1)
 		}
 	}
@@ -80,10 +83,10 @@ func scaffold(root, name string) {
 	for _, d := range dirs {
 		full := filepath.Join(root, d)
 		if err := os.MkdirAll(full, 0755); err != nil {
-			printError(fmt.Sprintf("could not create %s: %v", d, err))
+			util.PrintError(fmt.Sprintf("could not create %s: %v", d, err))
 			os.Exit(1)
 		}
-		printStep("mkdir", d+string(filepath.Separator))
+		util.PrintStep("mkdir", d+string(filepath.Separator))
 	}
 
 	// ── src/main.go ────────────────────────────────────────────────────────────
@@ -105,31 +108,31 @@ func scaffold(root, name string) {
 	}
 
 	// ── .super/version ─────────────────────────────────────────────────────────
-	writeFile(filepath.Join(root, ".super", "version"), version+"\n")
+	writeFile(filepath.Join(root, ".super", "version"), config.Version+"\n")
 
 	// ── go mod init ────────────────────────────────────────────────────────────
 	runGoModInit(root, name)
 
 	fmt.Println()
-	printSuccess(fmt.Sprintf("project \"%s\" is ready.", name))
+	util.PrintSuccess(fmt.Sprintf("project \"%s\" is ready.", name))
 }
 
 // ── file helpers ───────────────────────────────────────────────────────────────
 
 func writeFile(path, content string) {
 	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
-		printError(fmt.Sprintf("could not write %s: %v", filepath.Base(path), err))
+		util.PrintError(fmt.Sprintf("could not write %s: %v", filepath.Base(path), err))
 		os.Exit(1)
 	}
-	printStep("wrote", relativeLast(path))
+	util.PrintStep("wrote", relativeLast(path))
 }
 
 func writeFileExec(path, content string) {
 	if err := os.WriteFile(path, []byte(content), 0755); err != nil {
-		printError(fmt.Sprintf("could not write %s: %v", filepath.Base(path), err))
+		util.PrintError(fmt.Sprintf("could not write %s: %v", filepath.Base(path), err))
 		os.Exit(1)
 	}
-	printStep("wrote", relativeLast(path))
+	util.PrintStep("wrote", relativeLast(path))
 }
 
 func relativeLast(path string) string {
@@ -145,13 +148,13 @@ func runGoModInit(root, name string) {
 	cmd.Dir = root
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		printWarn(fmt.Sprintf("go mod init failed: %v", err))
+		util.PrintWarn(fmt.Sprintf("go mod init failed: %v", err))
 		if len(out) > 0 {
-			printWarn(string(out))
+			util.PrintWarn(string(out))
 		}
 		return
 	}
-	printStep("exec", "go mod init "+name)
+	util.PrintStep("exec", "go mod init "+name)
 }
 
 // ── file content generators ────────────────────────────────────────────────────
@@ -160,21 +163,9 @@ func srcMainGo() string {
 	return "package main\n\nvar version = \"dev\"\n\nfunc main() {\n}\n"
 }
 
-type projectConfig struct {
-	Project projectSection    `toml:"project"`
-	Scripts map[string]string `toml:"scripts"`
-}
-
-type projectSection struct {
-	Name         string `toml:"name"`
-	Version      string `toml:"version,omitempty"`
-	Description  string `toml:"description,omitempty"`
-	SuperVersion string `toml:"super_version,omitempty"`
-}
-
 func projectSettings(name string) string {
-	cfg := projectConfig{
-		Project: projectSection{Name: name, Version: "0.1.0", SuperVersion: version},
+	cfg := config.ProjectConfig{
+		Project: config.ProjectSection{Name: name, Version: "0.1.0", SuperVersion: config.Version},
 		Scripts: map[string]string{
 			"build": ".super/scripts",
 			"run":   ".super/scripts",
@@ -183,13 +174,13 @@ func projectSettings(name string) string {
 	}
 	b, err := toml.Marshal(cfg)
 	if err != nil {
-		printError("could not marshal project.settings: " + err.Error())
+		util.PrintError("could not marshal project.settings: " + err.Error())
 		os.Exit(1)
 	}
 	return string(b)
 }
 
-// -- bash scripts ---------------------------------------------------------------
+// ── bash scripts ───────────────────────────────────────────────────────────────
 
 func buildSH(name string) string {
 	return fmt.Sprintf(`#!/usr/bin/env bash
@@ -216,7 +207,7 @@ fi
 
 cd "$PROJECT_ROOT"
 echo "[super] building $NAME..."
-go build -ldflags "-X main.version=$NEW_VERSION" -o "build/$NAME" src/*.go
+go build -ldflags "-X main.version=$NEW_VERSION" -o "build/$NAME" ./src/
 echo "[super] build complete -> build/$NAME"
 `, name)
 }
@@ -248,11 +239,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 cd "$PROJECT_ROOT"
-exec go run src/main.go "$@"
+exec go run ./src/ "$@"
 `
 }
 
-// -- PowerShell scripts ---------------------------------------------------------
+// ── PowerShell scripts ─────────────────────────────────────────────────────────
 
 func buildPS1(name string) string {
 	return fmt.Sprintf(`$ErrorActionPreference = "Stop"
@@ -285,7 +276,7 @@ if ($OldVer) {
 
 Set-Location $ProjectRoot
 Write-Host "[super] building $Name..."
-go build -ldflags "-X main.version=$NewVersion" -o "build\$Name.exe" src\*.go
+go build -ldflags "-X main.version=$NewVersion" -o "build\$Name.exe" .\src\
 Write-Host "[super] build complete -> build\$Name.exe"
 `, name)
 }
@@ -315,6 +306,6 @@ $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ProjectRoot = Resolve-Path (Join-Path $ScriptDir "..\..")
 
 Set-Location $ProjectRoot
-go run src\main.go @args
+go run .\src\ @args
 `
 }

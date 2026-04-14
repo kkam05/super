@@ -1,4 +1,4 @@
-package main
+package cmd
 
 import (
 	"archive/zip"
@@ -12,20 +12,13 @@ import (
 	"strings"
 	"time"
 
+	"dxtrity/super/src/config"
+	"dxtrity/super/src/util"
+
 	"github.com/pelletier/go-toml"
 )
 
 const githubRepo = "kkam05/super"
-
-type globalConfig struct {
-	Super globalSuperSection `toml:"super"`
-}
-
-type globalSuperSection struct {
-	Version       string `toml:"version"`
-	InstallMethod string `toml:"install_method"`
-	UpdatedAt     string `toml:"updated_at"`
-}
 
 type githubRelease struct {
 	TagName string        `json:"tag_name"`
@@ -37,7 +30,7 @@ type githubAsset struct {
 	BrowserDownloadURL string `json:"browser_download_url"`
 }
 
-func cmdUpdate(args []string) {
+func CmdUpdate(args []string) {
 	var local bool
 	for _, a := range args {
 		if a == "--local" {
@@ -55,9 +48,9 @@ func cmdUpdate(args []string) {
 // ── local install ──────────────────────────────────────────────────────────────
 
 func updateLocal() {
-	projectRoot, err := findProjectRoot()
+	projectRoot, err := config.FindProjectRoot()
 	if err != nil {
-		printError(err.Error())
+		util.PrintError(err.Error())
 		os.Exit(1)
 	}
 
@@ -68,13 +61,13 @@ func updateLocal() {
 	srcPath := filepath.Join(projectRoot, "build", "super"+ext)
 
 	if _, err := os.Stat(srcPath); err != nil {
-		printError(fmt.Sprintf("binary not found at %s — run 'super run build' first", filepath.Join("build", "super"+ext)))
+		util.PrintError(fmt.Sprintf("binary not found at %s — run 'super run build' first", filepath.Join("build", "super"+ext)))
 		os.Exit(1)
 	}
 
 	// Read project version from project.settings
 	settingsPath := filepath.Join(projectRoot, "project.settings")
-	cfg, err := loadSettings(settingsPath)
+	cfg, err := config.LoadSettings(settingsPath)
 	newVersion := "unknown"
 	if err == nil && cfg.Project.Version != "" {
 		newVersion = cfg.Project.Version
@@ -82,38 +75,38 @@ func updateLocal() {
 
 	home, err := os.UserHomeDir()
 	if err != nil {
-		printError("could not determine home directory: " + err.Error())
+		util.PrintError("could not determine home directory: " + err.Error())
 		os.Exit(1)
 	}
 
 	binDir := filepath.Join(home, ".super", "bin")
 	if err := os.MkdirAll(binDir, 0755); err != nil {
-		printError("could not create ~/.super/bin: " + err.Error())
+		util.PrintError("could not create ~/.super/bin: " + err.Error())
 		os.Exit(1)
 	}
 
 	dstPath := filepath.Join(binDir, "super"+ext)
 	if err := copyFile(srcPath, dstPath, 0755); err != nil {
-		printError("could not install binary: " + err.Error())
+		util.PrintError("could not install binary: " + err.Error())
 		os.Exit(1)
 	}
-	printStep("installed", dstPath)
+	util.PrintStep("installed", dstPath)
 
 	writeGlobalSettings(home, newVersion, "local")
 
 	fmt.Println()
-	printSuccess(fmt.Sprintf("super v%s installed to %s", newVersion, dstPath))
-	printInfo(fmt.Sprintf("make sure %s is on your PATH", binDir))
+	util.PrintSuccess(fmt.Sprintf("super v%s installed to %s", newVersion, dstPath))
+	util.PrintInfo(fmt.Sprintf("make sure %s is on your PATH", binDir))
 }
 
 // ── remote install ─────────────────────────────────────────────────────────────
 
 func updateRemote() {
-	printInfo("checking for latest release...")
+	util.PrintInfo("checking for latest release...")
 
 	release, err := fetchLatestRelease()
 	if err != nil {
-		printError("could not fetch release info: " + err.Error())
+		util.PrintError("could not fetch release info: " + err.Error())
 		os.Exit(1)
 	}
 
@@ -126,7 +119,7 @@ func updateRemote() {
 		}
 	}
 	if downloadURL == "" {
-		printError(fmt.Sprintf("no release asset found for %s/%s (expected %s)", runtime.GOOS, runtime.GOARCH, assetName))
+		util.PrintError(fmt.Sprintf("no release asset found for %s/%s (expected %s)", runtime.GOOS, runtime.GOARCH, assetName))
 		os.Exit(1)
 	}
 
@@ -134,7 +127,7 @@ func updateRemote() {
 
 	home, err := os.UserHomeDir()
 	if err != nil {
-		printError("could not determine home directory: " + err.Error())
+		util.PrintError("could not determine home directory: " + err.Error())
 		os.Exit(1)
 	}
 
@@ -148,7 +141,7 @@ func updateRemote() {
 	backupDir := filepath.Join(home, ".super", "backup")
 	for _, d := range []string{binDir, tmpDir, backupDir} {
 		if err := os.MkdirAll(d, 0755); err != nil {
-			printError("could not create directory " + d + ": " + err.Error())
+			util.PrintError("could not create directory " + d + ": " + err.Error())
 			os.Exit(1)
 		}
 	}
@@ -161,28 +154,28 @@ func updateRemote() {
 		backupName := fmt.Sprintf("super-v%s-%s-%s.zip", curVersion, runtime.GOOS, runtime.GOARCH)
 		backupPath := filepath.Join(backupDir, backupName)
 		if err := zipBinary(dstPath, backupPath, "super"+ext); err != nil {
-			printWarn("could not create backup: " + err.Error())
+			util.PrintWarn("could not create backup: " + err.Error())
 		} else {
-			printStep("backed up", backupPath)
+			util.PrintStep("backed up", backupPath)
 		}
 	}
 
 	// Download release zip
 	tmpZip := filepath.Join(tmpDir, assetName)
-	printInfo(fmt.Sprintf("downloading %s...", release.TagName))
+	util.PrintInfo(fmt.Sprintf("downloading %s...", release.TagName))
 	if err := downloadFile(downloadURL, tmpZip); err != nil {
-		printError("download failed: " + err.Error())
+		util.PrintError("download failed: " + err.Error())
 		os.Exit(1)
 	}
-	printStep("downloaded", tmpZip)
+	util.PrintStep("downloaded", tmpZip)
 
 	// Extract binary from zip
 	binaryName := "super" + ext
 	if err := extractFromZip(tmpZip, binaryName, dstPath, 0755); err != nil {
-		printError("could not extract binary: " + err.Error())
+		util.PrintError("could not extract binary: " + err.Error())
 		os.Exit(1)
 	}
-	printStep("installed", dstPath)
+	util.PrintStep("installed", dstPath)
 
 	// Clean up tmp
 	_ = os.Remove(tmpZip)
@@ -190,8 +183,8 @@ func updateRemote() {
 	writeGlobalSettings(home, newVersion, "remote")
 
 	fmt.Println()
-	printSuccess(fmt.Sprintf("super v%s installed to %s", newVersion, dstPath))
-	printInfo(fmt.Sprintf("make sure %s is on your PATH", binDir))
+	util.PrintSuccess(fmt.Sprintf("super v%s installed to %s", newVersion, dstPath))
+	util.PrintInfo(fmt.Sprintf("make sure %s is on your PATH", binDir))
 }
 
 // ── helpers ────────────────────────────────────────────────────────────────────
@@ -203,7 +196,7 @@ func fetchLatestRelease() (*githubRelease, error) {
 		return nil, err
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("User-Agent", "super-cli/"+version)
+	req.Header.Set("User-Agent", "super-cli/"+config.Version)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -317,7 +310,7 @@ func currentInstalledVersion(home string) string {
 	if err != nil {
 		return "unknown"
 	}
-	var gcfg globalConfig
+	var gcfg config.GlobalConfig
 	if err := toml.Unmarshal(data, &gcfg); err != nil {
 		return "unknown"
 	}
@@ -329,8 +322,8 @@ func currentInstalledVersion(home string) string {
 
 func writeGlobalSettings(home, newVersion, method string) {
 	globalSettingsPath := filepath.Join(home, ".super", "super.settings")
-	gcfg := &globalConfig{
-		Super: globalSuperSection{
+	gcfg := &config.GlobalConfig{
+		Super: config.GlobalSuperSection{
 			Version:       newVersion,
 			InstallMethod: method,
 			UpdatedAt:     time.Now().Format("2006-01-02"),
@@ -339,9 +332,9 @@ func writeGlobalSettings(home, newVersion, method string) {
 	b, err := toml.Marshal(gcfg)
 	if err == nil {
 		if err := os.WriteFile(globalSettingsPath, b, 0644); err != nil {
-			printWarn("could not write super.settings: " + err.Error())
+			util.PrintWarn("could not write super.settings: " + err.Error())
 		} else {
-			printStep("updated", globalSettingsPath)
+			util.PrintStep("updated", globalSettingsPath)
 		}
 	}
 }

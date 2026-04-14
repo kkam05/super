@@ -1,4 +1,4 @@
-package main
+package cmd
 
 import (
 	"fmt"
@@ -6,14 +6,17 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"dxtrity/super/src/config"
+	"dxtrity/super/src/util"
 )
 
-func cmdFix(_ []string) {
-	projectRoot, err := findProjectRoot()
+func CmdFix(_ []string) {
+	projectRoot, err := config.FindProjectRoot()
 	if err != nil {
 		cwd, _ := os.Getwd()
 		projectRoot = cwd
-		printInfo("no project.settings found — fixing in current directory")
+		util.PrintInfo("no project.settings found — fixing in current directory")
 	}
 
 	var fixed int
@@ -29,24 +32,24 @@ func cmdFix(_ []string) {
 		full := filepath.Join(projectRoot, d)
 		if _, err := os.Stat(full); os.IsNotExist(err) {
 			if err := os.MkdirAll(full, 0755); err != nil {
-				printError(fmt.Sprintf("could not create %s: %v", d, err))
+				util.PrintError(fmt.Sprintf("could not create %s: %v", d, err))
 				os.Exit(1)
 			}
-			printStep("created", d+string(filepath.Separator))
+			util.PrintStep("created", d+string(filepath.Separator))
 			fixed++
 		}
 	}
 
 	// ── 2. project.settings ────────────────────────────────────────────────────
 	settingsPath := filepath.Join(projectRoot, "project.settings")
-	cfg, loadErr := loadSettings(settingsPath)
+	cfg, loadErr := config.LoadSettings(settingsPath)
 	settingsChanged := false
 
 	if loadErr != nil {
-		cfg = &projectConfig{
-			Project: projectSection{
+		cfg = &config.ProjectConfig{
+			Project: config.ProjectSection{
 				Name:         filepath.Base(projectRoot),
-				SuperVersion: version,
+				SuperVersion: config.Version,
 			},
 			Scripts: make(map[string]string),
 		}
@@ -63,8 +66,8 @@ func cmdFix(_ []string) {
 		settingsChanged = true
 	}
 
-	if cfg.Project.SuperVersion != version {
-		cfg.Project.SuperVersion = version
+	if cfg.Project.SuperVersion != config.Version {
+		cfg.Project.SuperVersion = config.Version
 		settingsChanged = true
 	}
 
@@ -76,14 +79,14 @@ func cmdFix(_ []string) {
 	}
 
 	if settingsChanged {
-		if err := saveSettings(settingsPath, cfg); err != nil {
-			printError("could not write project.settings: " + err.Error())
+		if err := config.SaveSettings(settingsPath, cfg); err != nil {
+			util.PrintError("could not write project.settings: " + err.Error())
 			os.Exit(1)
 		}
 		if loadErr != nil {
-			printStep("created", "project.settings")
+			util.PrintStep("created", "project.settings")
 		} else {
-			printStep("updated", "project.settings")
+			util.PrintStep("updated", "project.settings")
 		}
 		fixed++
 	}
@@ -91,15 +94,15 @@ func cmdFix(_ []string) {
 	// ── 3. .super/version ─────────────────────────────────────────────────────
 	versionFilePath := filepath.Join(projectRoot, ".super", "version")
 	existing, readErr := os.ReadFile(versionFilePath)
-	if readErr != nil || strings.TrimSpace(string(existing)) != version {
-		if err := os.WriteFile(versionFilePath, []byte(version+"\n"), 0644); err != nil {
-			printError("could not write .super/version: " + err.Error())
+	if readErr != nil || strings.TrimSpace(string(existing)) != config.Version {
+		if err := os.WriteFile(versionFilePath, []byte(config.Version+"\n"), 0644); err != nil {
+			util.PrintError("could not write .super/version: " + err.Error())
 			os.Exit(1)
 		}
 		if readErr != nil {
-			printStep("created", filepath.Join(".super", "version"))
+			util.PrintStep("created", filepath.Join(".super", "version"))
 		} else {
-			printStep("updated", filepath.Join(".super", "version"))
+			util.PrintStep("updated", filepath.Join(".super", "version"))
 		}
 		fixed++
 	}
@@ -134,18 +137,18 @@ func cmdFix(_ []string) {
 		p := filepath.Join(scriptsDir, s.filename)
 		if _, err := os.Stat(p); os.IsNotExist(err) {
 			if err := os.WriteFile(p, []byte(s.content), s.perm); err != nil {
-				printError(fmt.Sprintf("could not write %s: %v", s.filename, err))
+				util.PrintError(fmt.Sprintf("could not write %s: %v", s.filename, err))
 				os.Exit(1)
 			}
-			printStep("created", filepath.Join(".super", "scripts", s.filename))
+			util.PrintStep("created", filepath.Join(".super", "scripts", s.filename))
 			fixed++
 		}
 	}
 
 	fmt.Println()
 	if fixed == 0 {
-		printSuccess("project is already up to date.")
+		util.PrintSuccess("project is already up to date.")
 	} else {
-		printSuccess(fmt.Sprintf("fixed %d issue(s).", fixed))
+		util.PrintSuccess(fmt.Sprintf("fixed %d issue(s).", fixed))
 	}
 }

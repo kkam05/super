@@ -1,4 +1,4 @@
-package main
+package cmd
 
 import (
 	"fmt"
@@ -8,27 +8,28 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/pelletier/go-toml"
+	"dxtrity/super/src/config"
+	"dxtrity/super/src/util"
 )
 
-func cmdRun(args []string) {
+func CmdRun(args []string) {
 	if len(args) == 0 {
-		printError("usage: super run <script> [args...]")
+		util.PrintError("usage: super run <script> [args...]")
 		os.Exit(1)
 	}
 	scriptName := args[0]
 	passthrough := args[1:]
 
-	projectRoot, err := findProjectRoot()
+	projectRoot, err := config.FindProjectRoot()
 	if err != nil {
-		printError(err.Error())
+		util.PrintError(err.Error())
 		os.Exit(1)
 	}
 
 	settingsPath := filepath.Join(projectRoot, "project.settings")
-	cfg, err := loadSettings(settingsPath)
+	cfg, err := config.LoadSettings(settingsPath)
 	if err != nil {
-		printError("could not read project.settings: " + err.Error())
+		util.PrintError("could not read project.settings: " + err.Error())
 		os.Exit(1)
 	}
 
@@ -37,63 +38,19 @@ func cmdRun(args []string) {
 		// Check if a script file exists in .super/scripts/ and auto-register it.
 		if autoPath := findScriptFile(projectRoot, scriptName); autoPath != "" {
 			cfg.Scripts[scriptName] = ".super/scripts"
-			if err := saveSettings(settingsPath, cfg); err != nil {
-				printWarn("could not update project.settings: " + err.Error())
+			if err := config.SaveSettings(settingsPath, cfg); err != nil {
+				util.PrintWarn("could not update project.settings: " + err.Error())
 			} else {
-				printInfo(fmt.Sprintf("registered %q in [scripts] in project.settings", scriptName))
+				util.PrintInfo(fmt.Sprintf("registered %q in [scripts] in project.settings", scriptName))
 			}
 			scriptValue = ".super/scripts"
 		} else {
-			printError(fmt.Sprintf("unknown script %q — add it to [scripts] in project.settings", scriptName))
+			util.PrintError(fmt.Sprintf("unknown script %q — add it to [scripts] in project.settings", scriptName))
 			os.Exit(1)
 		}
 	}
 
 	runScript(projectRoot, scriptName, scriptValue, passthrough)
-}
-
-// ── project root discovery ─────────────────────────────────────────────────────
-
-func findProjectRoot() (string, error) {
-	dir, err := os.Getwd()
-	if err != nil {
-		return "", err
-	}
-	for {
-		if _, err := os.Stat(filepath.Join(dir, "project.settings")); err == nil {
-			return dir, nil
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			return "", fmt.Errorf("not inside a super project (no project.settings found)")
-		}
-		dir = parent
-	}
-}
-
-// ── settings I/O ──────────────────────────────────────────────────────────────
-
-func loadSettings(path string) (*projectConfig, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-	var cfg projectConfig
-	if err := toml.Unmarshal(data, &cfg); err != nil {
-		return nil, err
-	}
-	if cfg.Scripts == nil {
-		cfg.Scripts = make(map[string]string)
-	}
-	return &cfg, nil
-}
-
-func saveSettings(path string, cfg *projectConfig) error {
-	b, err := toml.Marshal(cfg)
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(path, b, 0644)
 }
 
 // ── script resolution & execution ─────────────────────────────────────────────
@@ -145,7 +102,7 @@ func runScript(projectRoot, scriptName, value string, passthrough []string) {
 		}
 		scriptPath := filepath.Join(resolved, scriptName+ext)
 		if _, err := os.Stat(scriptPath); err != nil {
-			printError(fmt.Sprintf("script file not found: %s", scriptPath))
+			util.PrintError(fmt.Sprintf("script file not found: %s", scriptPath))
 			os.Exit(1)
 		}
 		cmd = buildScriptCmd(isWindows, scriptPath, passthrough)
@@ -171,12 +128,12 @@ func runScript(projectRoot, scriptName, value string, passthrough []string) {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
-	printStep("run", scriptName)
+	util.PrintStep("run", scriptName)
 	if err := cmd.Run(); err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			os.Exit(exitErr.ExitCode())
 		}
-		printError("script failed: " + err.Error())
+		util.PrintError("script failed: " + err.Error())
 		os.Exit(1)
 	}
 }

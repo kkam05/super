@@ -1,9 +1,8 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -e
 
-# Create build directory if it doesn't exist
-mkdir -p build
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-# Build the Go binary
-go run src/main.go
-
-echo "[SUPER]: Binary ran successfully"
+cd "$PROJECT_ROOT"
+exec go run ./src/ "$@"
