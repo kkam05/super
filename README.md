@@ -65,17 +65,17 @@ The scaffolded project includes:
 
 ```
 myapp/
-  src/
-    main.go
-  build/
-  lib/
-  .super/
-    scripts/
-      build.sh
-      run.sh
-      dev.sh
-  project.settings
-  go.mod
+├── src/
+│   └── main.go
+├── build/
+├── lib/
+├── .super/
+│   └── scripts/
+│       ├── build.sh
+│       ├── run.sh
+│       └── dev.sh
+├── project.settings
+└── go.mod
 ```
 
 ### `super run <script> [args...]`
