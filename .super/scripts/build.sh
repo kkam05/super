@@ -17,6 +17,7 @@ if [ -n "$CURRENT" ]; then
   NEW_VERSION="$MAJOR.$MINOR.$((PATCH + 1))"
   sed -i.bak "s/^\(  version = \"\)[0-9]*\.[0-9]*\.[0-9]*/\1$NEW_VERSION/" "$SETTINGS" && rm -f "$SETTINGS.bak"
   sed -i.bak "s/var version = \"[^\"]*\"/var version = \"$NEW_VERSION\"/" "$MAIN_GO" && rm -f "$MAIN_GO.bak"
+  echo "$NEW_VERSION" > "$PROJECT_ROOT/.super/version"
   echo "[super] version: $CURRENT -> $NEW_VERSION"
 else
   NEW_VERSION="dev"

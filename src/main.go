@@ -5,7 +5,7 @@ import (
 	"os"
 )
 
-var version = "0.1.1"
+var version = "0.1.4"
 
 func main() {
 	args := os.Args[1:]
@@ -27,6 +27,10 @@ func main() {
 		cmdFix(rest)
 	case "update":
 		cmdUpdate(rest)
+	case "path":
+		cmdPath(rest)
+	case "dev":
+		cmdDev(rest)
 	case "version", "--version", "-v":
 		fmt.Printf("super v%s\n", version)
 	case "help", "--help", "-h":
@@ -62,6 +66,9 @@ func printUsage() {
 	fmt.Printf("  %-28s Ensures dirs, project.settings, scripts, and version file are correct.\n", "")
 	fmt.Printf("  %-28s Pull and install the latest release from GitHub.\n", bold.Sprint("update"))
 	fmt.Printf("  %-28s Use --local to install from build/super instead.\n", "")
+	fmt.Printf("  %-28s Check PATH and add ~/.super/bin if missing.\n", bold.Sprint("path"))
+	fmt.Printf("  %-28s Developer utilities (e.g. packaging releases).\n", bold.Sprint("dev")+" <subcommand>")
+	fmt.Printf("  %-28s Package the local build into a release zip.\n", "  "+bold.Sprint("release")+" --local")
 	fmt.Printf("  %-28s Print the super version.\n", bold.Sprint("version"))
 	fmt.Printf("  %-28s Show this help message.\n\n", bold.Sprint("help"))
 }
